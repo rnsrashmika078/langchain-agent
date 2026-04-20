@@ -12,7 +12,7 @@ from tools import (
     get_current_time,
     generate_files_with_python_code,
     # generate_pdf_file,
-    generate_html_code
+    generate_html_code,
 )
 
 stop = False
@@ -33,16 +33,13 @@ llm = ChatOllama(
 async def initAgent():
     agent = create_agent(
         llm,
-        temperature=1.0,
-        top_p=0.95,
-        top_k=64,
         tools=[
             get_current_time,
             normal_chat,
             generate_chart,
             generate_files_with_python_code,
             # generate_pdf_file,
-            generate_html_code
+            generate_html_code,
         ],
         middleware=[],
         system_prompt=SystemMessage(
