@@ -1,3 +1,4 @@
+import asyncio
 import json
 from typing import Optional
 from datetime import datetime
@@ -24,9 +25,9 @@ llm = ChatOllama(
     model="gemma4:e2b",
     # model="gemma3:latest",
     # model="deepseek-coder:6.7b",
-    reasoning=True,
     temperature=1.0,
     top_p=0.95,
+    reasoning=True,
     top_k=64,
 )
 
@@ -44,19 +45,7 @@ async def initAgent():
         ],
         middleware=[],
         system_prompt=SystemMessage(
-            content="You are a ai agent with tools. Use tools when needed. Never output tool calls as text.\n\n"
-            "TOOLS:\n"
-            "use chat in sinhala lanagage when user ask\n"
-            "- get_current_time → time queries\n"
-            "- generate_python_code → generate Python code\n"
-            "- generate_chart → charts or visualizations\n"
-            "- generate_html_code →  Generate structured government form HTML "
-            "- normal_chat → general conversation\n\n"
-            "RULES:\n"
-            "- Respond in markdown\n"
-            "- Reuse existing filenames\n"
-            "- Short answers only\n"
-            "- Math → final answer only\n"
+            content="You are a help full ai agent. Use tools when needed. Never output tool calls as text.\n\n"
         ),
     )
 
@@ -71,30 +60,47 @@ async def requestLLM(prompt: str):
         agent = await initAgent()
 
         async for chunk, metadata in agent.astream(
-            {"messages": messages},
-            stream_mode="messages",
+            {"messages": messages}, stream_mode="messages"
         ):
-            print(chunk)
             if chunk.type == "AIMessageChunk":
-                if chunk.tool_calls:
-                    tool = chunk.tool_calls
+                if (
+                    hasattr(chunk, "additional_kwargs")
+                    and "reasoning_content" in chunk.additional_kwargs
+                ):
                     yield json.dumps(
                         {
-                            "message": "",
+                            "status": "reasoning",
+                            "type": "status",
+                            "reasoning": chunk.additional_kwargs["reasoning_content"],
+                        }
+                    ) + "\n"
+                if chunk.tool_calls:
+                    tool = (chunk.tool_calls,)
+                    yield json.dumps({"type": "tool", "status": "calling_tool"}) + "\n"
+                    yield json.dumps(
+                        {
                             "type": "tool",
-                            "t_name": "tool calling",
+                            "status": "calling_tool",
                             "content": tool,
                         }
                     ) + "\n"
-                elif chunk.content and chunk.type == "AIMessageChunk":
+                if chunk.content:
+                    yield json.dumps({"type": "status", "status": "responding"}) + "\n"
+
                     yield json.dumps(
                         {
                             "message": chunk.content,
-                            "type": "tool",
+                            "type": "message",
+                            "status": "replying",
                             "content": tool,
-                            "t_name": None,
                         }
                     ) + "\n"
+
+            full_response += chunk.content or ""
+
+        yield json.dumps(
+            {"type": "message", "status": "finished", "content": tool}
+        ) + "\n"
         messages.append(AIMessage(content=full_response))
     except Exception as e:
         print(str(e))
